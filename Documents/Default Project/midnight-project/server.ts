@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -20,6 +21,10 @@ const PORT = Number(process.env.PORT) || 3000;
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
+  app.use(cors({
+    origin: ['https://midnight-study-app-71505.web.app', 'http://localhost:5173'],
+    credentials: true,
+  }));
 
   app.get('/api/ai/status', (_req, res) => {
     const configured = Boolean(process.env.GEMINI_API_KEY?.trim());
