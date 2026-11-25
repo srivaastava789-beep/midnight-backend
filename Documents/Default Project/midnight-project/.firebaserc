@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "midnight-study-workspace-71505"
+  },
+  "targets": {
+    "midnight-study-workspace-71505": {
+      "hosting": {
+        "midnight-site": [
+          "midnight-study-app-71505"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

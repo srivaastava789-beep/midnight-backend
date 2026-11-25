@@ -1,0 +1,6 @@
+{
+  "name": "MIDNIGHT",
+  "description": "Personal ICSE Class 10 academic preparation and adaptive study planner. Less noise. More focus.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
