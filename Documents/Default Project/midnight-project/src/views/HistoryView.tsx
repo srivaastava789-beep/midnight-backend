@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { Download, RotateCcw, Trash2, Upload } from 'lucide-react';
 import { SUBJECT_MAP } from '../data/seed';
 import { calculateDaySummary, calculateWeeklyAnalytics } from '../engine/analytics';
@@ -85,7 +86,18 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   };
 
   return (
-    <div className="space-y-10">
+    <ErrorBoundary fallback={<div className="p-6 text-center">
+      <div className="text-xs font-mono text-[#858585] uppercase tracking-wider">
+        History Section Error
+      </div>
+      <h3 className="mt-2 font-display text-lg font-semibold text-white">
+        History & Analytics temporarily unavailable
+      </h3>
+      <p className="text-xs text-[#555555] mt-2 max-w-md mx-auto">
+        The history section encountered a rendering error. Please refresh the page or try another section.
+      </p>
+    </div>}>
+      <div className="space-y-10">
       <header className="border-b border-[#262626] pb-6">
         <div className="text-xs font-mono text-[#858585] uppercase tracking-wider">
           Preserved Logs &amp; Weekly Insights
@@ -441,5 +453,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         )}
       </section>
     </div>
+    </ErrorBoundary>
   );
 };

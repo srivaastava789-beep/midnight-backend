@@ -32,6 +32,8 @@ export interface AIScheduleChatResponse {
   operations: ScheduleOperation[];
 }
 
+const BACKEND_URL = 'https://midnight-backend-jfev.onrender.com';
+
 async function parseError(res: Response): Promise<string> {
   try {
     const data = (await res.json()) as { error?: string };
@@ -43,7 +45,7 @@ async function parseError(res: Response): Promise<string> {
 }
 
 export async function fetchAIStatus(): Promise<AIStatusResponse> {
-  const res = await fetch('/api/ai/status');
+  const res = await fetch(`${BACKEND_URL}/api/ai/status`);
   if (!res.ok) {
     throw new Error(await parseError(res));
   }
@@ -55,7 +57,7 @@ export async function requestGeminiDayPlan(
   targetDate: string,
   availableMinutes: number
 ): Promise<AIPlanResponse> {
-  const res = await fetch('/api/ai/plan', {
+  const res = await fetch(`${BACKEND_URL}/api/ai/plan`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ state, targetDate, availableMinutes }),
@@ -72,7 +74,7 @@ export async function requestGeminiRecovery(
   missedTasks: StudyTask[],
   overdueRevisions: RevisionTask[]
 ): Promise<AIRecoveryResponse> {
-  const res = await fetch('/api/ai/recover', {
+  const res = await fetch(`${BACKEND_URL}/api/ai/recover`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ state, activeDate, missedTasks, overdueRevisions }),
@@ -89,7 +91,7 @@ export async function requestGeminiScheduleChat(
   history: ScheduleChatTurn[],
   message: string
 ): Promise<AIScheduleChatResponse> {
-  const res = await fetch('/api/ai/schedule-chat', {
+  const res = await fetch(`${BACKEND_URL}/api/ai/schedule-chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ state, activeDate, history, message }),
