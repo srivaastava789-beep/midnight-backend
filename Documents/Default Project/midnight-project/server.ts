@@ -3,7 +3,6 @@ import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Groq from 'groq';
 import type { AppState, ScheduleChatTurn, StudyTask } from './src/types/study.ts';
 import { isValidISODate } from './src/engine/validator.ts';
 
@@ -12,11 +11,33 @@ const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
-
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL = 'llama-3.1-8b-instant';
+
+async function callGroq(prompt: string): Promise<string> {
+  const res = await fetch(GROQ_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${GROQ_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+      max_tokens: 2000,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Groq API error: ${res.status} ${errorText}`);
+  }
+
+  const data = await res.json();
+  return data.choices[0]?.message?.content ?? '';
+}
 
 async function startServer() {
   const app = express();
@@ -27,7 +48,7 @@ async function startServer() {
   }));
 
   app.get('/api/ai/status', (_req, res) => {
-    const configured = Boolean(process.env.GROQ_API_KEY?.trim());
+    const configured = Boolean(GROQ_API_KEY?.trim());
     res.json({
       configured,
       model: MODEL,
@@ -156,16 +177,6 @@ INSTRUCTIONS:
 Do not include markdown formatting, just raw JSON.`;
   }
 
-  async function callGroq(prompt: string): Promise<string> {
-    const completion = await groq.chat.completions.create({
-      messages: [{ role: 'user', content: prompt }],
-      model: MODEL,
-      temperature: 0.7,
-      max_tokens: 2000,
-    });
-    return completion.choices[0]?.message?.content ?? '';
-  }
-
   app.post('/api/ai/plan', async (req, res) => {
     try {
       const body = req.body as {
@@ -191,7 +202,6 @@ Do not include markdown formatting, just raw JSON.`;
       const prompt = buildPlanPrompt(body.state, body.targetDate, availableMinutes);
       const responseText = await callGroq(prompt);
 
-      // Try to parse JSON from response (handle potential markdown wrapping)
       let jsonText = responseText.trim();
       if (jsonText.startsWith('```json')) {
         jsonText = jsonText.replace(/^```json\n/, '').replace(/\n```$/, '');
