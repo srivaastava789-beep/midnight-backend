@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Groq } from 'groq';
+import Groq from 'groq';
 import type { AppState, ScheduleChatTurn, StudyTask } from './src/types/study.ts';
 import { isValidISODate } from './src/engine/validator.ts';
 
