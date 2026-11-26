@@ -8,7 +8,7 @@ import type { AppState, ScheduleChatTurn, StudyTask } from './src/types/study.ts
 import { isValidISODate } from './src/engine/validator.ts';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__dirname);
+const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
 
