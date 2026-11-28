@@ -138,7 +138,7 @@ export function calculateDaySummary(plan: DayPlan | undefined, state: AppState, 
     focusMinutesLogged,
     carriedForwardCount,
     revisionsCompleted,
-    workoutCompleted: plan.workout.completed,
+    workoutCompleted: plan.workout?.completed ?? false,
   };
 }
 
