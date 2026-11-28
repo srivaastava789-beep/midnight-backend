@@ -5,177 +5,51 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AppState, ScheduleChatTurn, StudyTask } from './src/types/study.ts';
 import { isValidISODate } from './src/engine/validator.ts';
+import {
+  GROQ_MODEL,
+  GroqConfigError,
+  GroqResponseError,
+  chatScheduleWithGroq,
+  generateGroqDayPlan,
+  generateGroqRecoveryPlan,
+} from './server/groq.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODEL = 'llama-3.1-8b-instant';
-
-async function callGroq(prompt: string): Promise<string> {
-  const res = await fetch(GROQ_API_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${GROQ_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 2000,
-    }),
-  });
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Groq API error: ${res.status} ${errorText}`);
+function sendAiError(res: express.Response, err: unknown, fallbackMessage: string) {
+  if (err instanceof GroqConfigError || err instanceof GroqResponseError) {
+    res.status(err.statusCode).json({ error: err.message });
+    return;
   }
-
-  const data = await res.json();
-  return data.choices[0]?.message?.content ?? '';
+  const message = err instanceof Error ? err.message : fallbackMessage;
+  res.status(502).json({ error: message });
 }
 
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
-  app.use(cors({
-    origin: ['https://midnight-study-app-71505.web.app', 'http://localhost:5173'],
-    credentials: true,
-  }));
+  app.use(
+    cors({
+      origin: [
+        'https://midnight-study-app-71505.web.app',
+        'https://midnight-backend-jfev.onrender.com',
+        'http://localhost:5173',
+        'http://localhost:3000',
+      ],
+      credentials: true,
+    })
+  );
 
   app.get('/api/ai/status', (_req, res) => {
-    const configured = Boolean(GROQ_API_KEY?.trim());
+    const configured = Boolean(process.env.GROQ_API_KEY?.trim());
     res.json({
       configured,
-      model: MODEL,
+      model: GROQ_MODEL,
     });
   });
-
-  function buildPlanPrompt(state: AppState, targetDate: string, availableMinutes: number): string {
-    const subjects = state.chapters.map((c) => ({
-      id: c.id,
-      name: c.chapterName,
-      subjectId: c.subjectId,
-      status: c.status,
-      difficulty: c.difficulty,
-      confidence: c.confidence,
-      lastStudiedDate: c.lastStudiedDate,
-    })).filter((s) => s.status !== 'Completed' && s.status !== 'Strong');
-
-    const exams = state.exams.map((e) => ({
-      date: e.date,
-      subject: e.subjectName,
-      notes: e.notes,
-    }));
-
-    const revisions = state.revisions.filter((r) => !r.completed).map((r) => ({
-      chapterId: r.chapterId,
-      chapterName: r.chapterName,
-      stage: r.stage,
-      dueDate: r.scheduledDate,
-    }));
-
-    return `You are an expert ICSE Class 10 study planner. Create a realistic study plan for ${targetDate} with ${availableMinutes} minutes available.
-
-CURRENT STATE:
-- Chapters to study: ${JSON.stringify(subjects, null, 2)}
-- Upcoming exams: ${JSON.stringify(exams, null, 2)}
-- Pending revisions: ${JSON.stringify(revisions, null, 2)}
-- Settings: blockDurationMinutes=${state.settings.blockDurationMinutes}, timeEstimateStandard=${state.settings.timeEstimateStandard}
-
-INSTRUCTIONS:
-1. Create tasks that fit within ${availableMinutes} minutes total
-2. Prioritize chapters due for revision and upcoming exams
-3. Each task should have: id, title, chapterId (if applicable), subjectId, taskType ('first_study' or 'revision'), durationMinutes, timeSlot (e.g., '09:00 AM'), objective, practiceTopicId (optional)
-4. Alternate subjects to avoid fatigue
-5. Include short breaks every 60-90 minutes
-6. Return ONLY valid JSON with this exact structure:
-{
-  "tasks": [...],
-  "whyThisPlan": "brief explanation",
-  "remainingBacklog": []
-}
-
-Do not include markdown formatting, just raw JSON.`;
-  }
-
-  function buildRecoveryPrompt(state: AppState, activeDate: string, missedTasks: StudyTask[], overdueRevisions: any[]): string {
-    const missed = missedTasks.map((t) => ({
-      id: t.id,
-      title: t.title,
-      chapterId: t.chapterId,
-      scheduledDate: t.scheduledDate,
-    }));
-
-    return `You are an expert ICSE Class 10 study planner. Help prioritize recovery for ${activeDate}.
-
-MISSED TASKS: ${JSON.stringify(missed, null, 2)}
-OVERDUE REVISIONS: ${JSON.stringify(overdueRevisions, null, 2)}
-CURRENT STATE: chapters=${JSON.stringify(state.chapters.map((c) => ({ id: c.id, name: c.chapterName, status: c.status })))}
-
-Return ONLY valid JSON:
-{
-  "suggestions": [
-    {
-      "id": "string",
-      "kind": "task" | "revision",
-      "sourceTaskId": "string or null",
-      "sourceRevisionId": "string or null",
-      "chapterId": "string",
-      "chapterName": "string",
-      "subjectId": "string",
-      "action": "reschedule" | "complete" | "flag_weak",
-      "reason": "string"
-    }
-  ],
-  "whyThisRecovery": "brief explanation",
-  "remainingBacklogCount": number
-}
-
-Do not include markdown formatting, just raw JSON.`;
-  }
-
-  function buildScheduleChatPrompt(state: AppState, activeDate: string, history: ScheduleChatTurn[], message: string): string {
-    const chatHistory = history.map((h) => `${h.role === 'user' ? 'Student' : 'Assistant'}: ${h.text}`).join('\n');
-
-    return `You are an expert ICSE Class 10 study assistant. The student is chatting with you about their study schedule for ${activeDate}.
-
-CURRENT STATE SUMMARY:
-- Chapters: ${state.chapters.length} total
-- Exams: ${state.exams.length} upcoming
-- Plans for today: ${state.plans[activeDate]?.tasks.length ?? 0} tasks
-- Settings: blockDurationMinutes=${state.settings.blockDurationMinutes}
-
-CONVERSATION HISTORY:
-${chatHistory}
-
-STUDENT MESSAGE: ${message}
-
-INSTRUCTIONS:
-1. Respond helpfully and concisely
-2. If the student wants to reschedule, reorganize, or modify their plan, provide specific operations
-3. Return ONLY valid JSON:
-{
-  "assistantMessage": "your response text",
-  "isOutOfScope": boolean,
-  "operations": [
-    {
-      "type": "move_task" | "complete_task" | "add_task" | "delete_task" | "update_chapter_status",
-      "taskId": "string or null",
-      "chapterId": "string or null",
-      "newDate": "string or null",
-      "newStatus": "string or null",
-      "details": "string"
-    }
-  ]
-}
-
-Do not include markdown formatting, just raw JSON.`;
-  }
 
   app.post('/api/ai/plan', async (req, res) => {
     try {
@@ -199,21 +73,10 @@ Do not include markdown formatting, just raw JSON.`;
         Math.min(300, Number(body.availableMinutes) || body.state.settings.blockDurationMinutes * 2)
       );
 
-      const prompt = buildPlanPrompt(body.state, body.targetDate, availableMinutes);
-      const responseText = await callGroq(prompt);
-
-      let jsonText = responseText.trim();
-      if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.replace(/^```json\n/, '').replace(/\n```$/, '');
-      } else if (jsonText.startsWith('```')) {
-        jsonText = jsonText.replace(/^```\n/, '').replace(/\n```$/, '');
-      }
-
-      const result = JSON.parse(jsonText);
+      const result = await generateGroqDayPlan(body.state, body.targetDate, availableMinutes);
       res.json(result);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unexpected server error while calling Groq.';
-      res.status(502).json({ error: message });
+      sendAiError(res, err, 'Unexpected server error while generating study plan.');
     }
   });
 
@@ -242,30 +105,19 @@ Do not include markdown formatting, just raw JSON.`;
         return;
       }
 
-      const prompt = buildRecoveryPrompt(
+      const result = await generateGroqRecoveryPlan(
         body.state,
         body.activeDate,
         Array.isArray(body.missedTasks) ? body.missedTasks : [],
         Array.isArray(body.overdueRevisions) ? body.overdueRevisions : []
       );
-      const responseText = await callGroq(prompt);
-
-      let jsonText = responseText.trim();
-      if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.replace(/^```json\n/, '').replace(/\n```$/, '');
-      } else if (jsonText.startsWith('```')) {
-        jsonText = jsonText.replace(/^```\n/, '').replace(/\n```$/, '');
-      }
-
-      const result = JSON.parse(jsonText);
       res.json(result);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unexpected server error during Groq recovery.';
-      res.status(502).json({ error: message });
+      sendAiError(res, err, 'Unexpected server error during recovery planning.');
     }
   });
 
-  app.post('/api/schedule-chat', async (req, res) => {
+  const handleScheduleChat: express.RequestHandler = async (req, res) => {
     try {
       const body = req.body as {
         state?: AppState;
@@ -287,28 +139,20 @@ Do not include markdown formatting, just raw JSON.`;
         return;
       }
 
-      const prompt = buildScheduleChatPrompt(
+      const result = await chatScheduleWithGroq(
         body.state,
         body.activeDate,
         Array.isArray(body.history) ? body.history : [],
         body.message.trim()
       );
-      const responseText = await callGroq(prompt);
-
-      let jsonText = responseText.trim();
-      if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.replace(/^```json\n/, '').replace(/\n```$/, '');
-      } else if (jsonText.startsWith('```')) {
-        jsonText = jsonText.replace(/^```\n/, '').replace(/\n```$/, '');
-      }
-
-      const result = JSON.parse(jsonText);
       res.json(result);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unexpected server error during Groq schedule chat.';
-      res.status(502).json({ error: message });
+      sendAiError(res, err, 'Unexpected server error during schedule chat.');
     }
-  });
+  };
+
+  app.post('/api/ai/schedule-chat', handleScheduleChat);
+  app.post('/api/schedule-chat', handleScheduleChat);
 
   if (process.env.NODE_ENV === 'production') {
     const distDir = path.join(__dirname, 'dist');

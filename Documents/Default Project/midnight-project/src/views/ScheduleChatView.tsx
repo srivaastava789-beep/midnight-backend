@@ -325,7 +325,7 @@ export const ScheduleChatView: React.FC<ScheduleChatViewProps> = ({
             >
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" aria-hidden="true" />
               <div>
-                <div className="font-medium text-slate-200">Gemini response interrupted</div>
+                <div className="font-medium text-slate-200">AI response interrupted</div>
                 <p className="mt-0.5 text-slate-300/80">{error}</p>
               </div>
             </div>
@@ -337,7 +337,7 @@ export const ScheduleChatView: React.FC<ScheduleChatViewProps> = ({
         <form onSubmit={handleSubmit} className="border-t border-[#1F293D] bg-[#06080F] p-4 flex items-end gap-3">
           <div className="flex-1">
             <label htmlFor="schedule-chat-input" className="sr-only">
-              Ask Gemini anything about your study, syllabus, subtopics, or schedule
+              Ask MIDNIGHT AI anything about your study, syllabus, subtopics, or schedule
             </label>
             <textarea
               id="schedule-chat-input"
