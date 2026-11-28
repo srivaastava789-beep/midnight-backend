@@ -15,7 +15,7 @@ import { addDays, diffDays, getDayOfWeek, getWeekdayName } from '../src/utils/da
 import { validateAndConstrainDayTasks } from '../src/engine/validator.ts';
 import { normalizeSubjectId } from '../src/engine/scheduleMutator.ts';
 
-export const GROQ_MODEL = 'llama-3.3-70b-versatile';
+export const GROQ_MODEL = 'llama-3.1-8b-instant';
 const GROQ_FALLBACK_MODEL = 'llama-3.1-8b-instant';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -97,7 +97,7 @@ async function callGroqJson<T>(
 
       if (!res.ok) {
         const errorText = await res.text();
-        const transient = res.status === 429 || res.status >= 500;
+        const transient = res.status === 429 || res.status === 404 || res.status >= 500;
         if (res.status === 401 || res.status === 403) {
           throw new GroqResponseError(
             'Groq API key was rejected. Check GROQ_API_KEY in Render environment variables.',
